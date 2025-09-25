@@ -1,0 +1,375 @@
+# OpenAI Billing Monitor
+
+[![PyPI version](https://badge.fury.io/py/openai-billing-monitor.svg)](https://badge.fury.io/py/openai-billing-monitor)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+一个用于监控和控制OpenAI API成本的Python库，提供低侵入式集成、实时监控和成本控制功能。
+
+## ✨ 特性
+
+- 🔍 **实时监控**: 自动跟踪token使用量和API成本
+- 🛡️ **成本控制**: 设置日/月成本和token限制，超限自动阻止请求
+- 🔧 **低侵入性**: 通过装饰器或包装器轻松集成，无需修改现有代码
+- 🎯 **多模型支持**: 内置主流AI模型计费配置（OpenAI、Qwen、Claude等）
+- 📊 **可视化界面**: Tkinter GUI用于配置管理和使用监控
+- 💾 **持久化存储**: 自动保存使用统计和配置
+- ⚠️ **智能预警**: 接近限制时自动警告
+- 📈 **详细统计**: 提供全面的使用分析和报告
+
+## 🚀 快速开始
+
+### 安装
+
+```bash
+pip install openai-billing-monitor
+```
+
+### 基本使用
+
+#### 方式1: 使用装饰器（推荐）
+
+```python
+import openai
+from openai_billing import monitor_openai_call
+
+# 设置OpenAI API密钥
+openai.api_key = "your-api-key"
+
+# 使用装饰器监控API调用
+@monitor_openai_call(model_name="gpt-4")
+def chat_with_gpt4(messages):
+    client = openai.OpenAI()
+    return client.chat.completions.create(
+        model="gpt-4",
+        messages=messages
+    )
+
+# 正常调用，自动监控
+response = chat_with_gpt4([
+    {"role": "user", "content": "Hello, how are you?"}
+])
+```
+
+#### 方式2: 使用包装器
+
+```python
+from openai_billing import OpenAIWrapper
+
+# 创建包装的OpenAI客户端
+client = OpenAIWrapper(api_key="your-api-key")
+
+# 正常使用，自动监控
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+# 查看使用统计
+print(client.get_usage_summary())
+```
+
+#### 方式3: 手动监控
+
+```python
+from openai_billing import BillingMonitor
+import openai
+
+# 创建监控器
+monitor = BillingMonitor()
+
+# 手动跟踪使用
+client = openai.OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+# 跟踪响应
+usage_info = monitor.track_openai_response(
+    response.model_dump(), 
+    "gpt-4"
+)
+print(f"本次调用成本: ${usage_info['cost']:.4f}")
+```
+
+## 📊 GUI界面
+
+启动图形界面进行配置和监控：
+
+```bash
+# 方式1: 使用Python模块启动（推荐）
+python -m openai_billing.gui.main
+
+# 方式2: 命令行工具（需要配置PATH）
+openai-billing-gui
+
+# 方式3: 在Python代码中启动
+from openai_billing.gui import main
+main()
+```
+
+**注意**: 如果使用命令行工具遇到"命令未找到"错误，请：
+1. 将Python Scripts目录添加到PATH：`%USERPROFILE%\AppData\Roaming\Python\Python3xx\Scripts`
+2. 或直接使用方式1的Python模块启动
+
+GUI功能包括：
+- 📈 实时使用统计显示
+- ⚙️ 模型配置管理
+- 🎚️ 阈值设置
+- 📊 详细统计报告
+- 🔄 自动刷新监控
+
+## 🔧 配置
+
+### 基本配置
+
+```python
+from openai_billing import BillingMonitor
+from openai_billing.models import ThresholdConfig
+
+monitor = BillingMonitor()
+
+# 设置阈值
+thresholds = ThresholdConfig(
+    daily_cost_limit=10.0,      # 日成本限制 $10
+    monthly_cost_limit=100.0,   # 月成本限制 $100
+    daily_token_limit=1000000,  # 日token限制 100万
+    monthly_token_limit=10000000, # 月token限制 1000万
+    warning_threshold=0.8       # 80%时警告
+)
+
+monitor.config_manager.update_thresholds(thresholds)
+```
+
+### 添加自定义模型
+
+```python
+from openai_billing.models import ModelConfig
+
+# 添加自定义模型配置
+custom_model = ModelConfig(
+    name="custom-model",
+    input_token_price=0.001,    # 每1000输入token价格
+    output_token_price=0.002,   # 每1000输出token价格
+    max_tokens=8192
+)
+
+monitor.config_manager.add_model_config(custom_model)
+```
+
+### 配置文件位置
+
+配置文件默认存储在：
+- Windows: `%USERPROFILE%\.openai_billing\`
+- macOS/Linux: `~/.openai_billing/`
+
+包含文件：
+- `openai_billing_config.yaml`: 主配置文件
+- `openai_billing_stats.json`: 使用统计数据
+
+## 📈 使用统计
+
+### 获取统计摘要
+
+```python
+# 获取完整统计
+summary = monitor.get_usage_summary()
+print(f"总成本: ${summary['total_cost']:.4f}")
+print(f"今日成本: ${summary['daily_cost']:.4f}")
+print(f"本月成本: ${summary['monthly_cost']:.4f}")
+print(f"总请求数: {summary['total_requests']}")
+```
+
+### 重置统计
+
+```python
+# 重置所有统计
+monitor.reset_usage_stats("all")
+
+# 重置日统计
+monitor.reset_usage_stats("daily")
+
+# 重置月统计
+monitor.reset_usage_stats("monthly")
+```
+
+## 🛠️ 高级功能
+
+### 预检查请求
+
+```python
+# 检查请求是否会超限
+check_result = monitor.check_limits_before_request("gpt-4", 1000)
+if check_result["allowed"]:
+    # 执行API调用
+    pass
+else:
+    print("请求被阻止:", check_result["warnings"])
+```
+
+### 设置回调函数
+
+```python
+def on_warning(warning_type, usage_info):
+    print(f"警告: {warning_type}")
+    print(f"当前使用: {usage_info}")
+
+def on_exceeded(exceeded_type, usage_info):
+    print(f"超限: {exceeded_type}")
+    # 发送通知、记录日志等
+
+monitor.on_threshold_warning = on_warning
+monitor.on_threshold_exceeded = on_exceeded
+```
+
+### 上下文管理器
+
+```python
+from openai_billing.core.wrapper import temporary_monitoring, disable_monitoring
+
+# 临时启用监控
+with temporary_monitoring():
+    response = client.chat.completions.create(...)
+
+# 临时禁用监控
+with disable_monitoring():
+    response = client.chat.completions.create(...)
+```
+
+## 🎯 支持的模型
+
+内置支持以下模型的计费配置：
+
+### OpenAI模型
+- GPT-4 系列 (gpt-4, gpt-4-turbo, gpt-4o, gpt-4o-mini)
+- GPT-3.5 系列 (gpt-3.5-turbo, gpt-3.5-turbo-16k)
+
+### 其他厂商模型
+- **Qwen**: qwen-turbo, qwen-plus, qwen-max
+- **Claude**: claude-3-opus, claude-3-sonnet, claude-3-haiku
+- **Gemini**: gemini-pro, gemini-pro-vision
+- **DeepSeek**: deepseek-chat, deepseek-coder
+- **Moonshot**: moonshot-v1-8k/32k/128k
+- **Baichuan**: baichuan2-turbo
+
+更多模型配置可通过GUI或代码添加。
+
+## 🔒 异常处理
+
+```python
+from openai_billing.core.exceptions import (
+    ThresholdExceededException,
+    ModelNotConfiguredException
+)
+
+try:
+    response = monitored_function()
+except ThresholdExceededException as e:
+    print(f"达到限制: {e.threshold_type}")
+    print(f"当前值: {e.current_value}, 限制: {e.limit_value}")
+except ModelNotConfiguredException as e:
+    print(f"模型未配置: {e.model_name}")
+```
+
+## 📊 导出数据
+
+### 导出配置
+
+```python
+# 导出为YAML
+monitor.config_manager.export_config("my_config.yaml")
+
+# 导出为JSON
+monitor.config_manager.export_config("my_config.json")
+```
+
+### 导出统计数据
+
+```python
+import json
+
+# 获取并保存统计数据
+summary = monitor.get_usage_summary()
+with open("usage_stats.json", "w") as f:
+    json.dump(summary, f, indent=2, default=str)
+```
+
+## 🔄 与现有代码集成
+
+### 最小侵入式集成
+
+```python
+# 原有代码
+import openai
+client = openai.OpenAI()
+
+# 添加监控（只需一行）
+from openai_billing import patch_openai_client
+client = patch_openai_client(client)
+
+# 其他代码无需修改
+response = client.chat.completions.create(...)
+```
+
+### 批量监控
+
+```python
+# 对多个函数批量添加监控
+functions_to_monitor = [func1, func2, func3]
+for func in functions_to_monitor:
+    func = monitor_openai_call()(func)
+```
+
+## 🚀 部署到生产环境
+
+### 环境变量配置
+
+```bash
+export OPENAI_BILLING_CONFIG_DIR="/path/to/config"
+export OPENAI_BILLING_ENABLED="true"
+export OPENAI_BILLING_AUTO_SAVE="true"
+```
+
+### Docker集成
+
+```dockerfile
+FROM python:3.9
+RUN pip install openai-billing-monitor
+COPY config/ /app/.openai_billing/
+ENV OPENAI_BILLING_CONFIG_DIR=/app/.openai_billing
+# 其他配置...
+```
+
+## 🤝 贡献
+
+欢迎提交Issue和Pull Request！
+
+1. Fork项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送分支 (`git push origin feature/AmazingFeature`)
+5. 创建Pull Request
+
+## 📄 许可证
+
+本项目使用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+
+## 🆘 支持
+
+- 📖 [文档](https://github.com/lemonhall/openai-billing-monitor/wiki)
+- 🐛 [Issues](https://github.com/lemonhall/openai-billing-monitor/issues)
+- 💬 [Discussions](https://github.com/lemonhall/openai-billing-monitor/discussions)
+
+## 📋 更新日志
+
+### v0.1.0
+- 初始版本发布
+- 基本监控功能
+- GUI界面
+- 多模型支持
+- 配置管理
+
+---
+
+**⭐ 如果这个项目对你有帮助，请给个星标支持一下！**
